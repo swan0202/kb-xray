@@ -12,3 +12,4 @@ seaborn
 lime
 shap
 konlpy
+fpdf2
