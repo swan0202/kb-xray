@@ -11,8 +11,8 @@ import time
 import base64
 import os
 import json
+import pdf_export
 
-# ====== 데이터 영속성 (로컬 저장소) ======
 HISTORY_FILE = "kb_xray_history.json"
 
 def load_history():
@@ -39,7 +39,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ====== 로컬 OTF 폰트 로드 ======
 @st.cache_data
 def get_base64_of_bin_file(filename):
     try:
@@ -88,34 +87,51 @@ else:
     }
     """
 
-# ====== 전역 CSS 적용 ======
+# ====== 다크/라이트 모드 자동 적응 스타일 ======
 st.markdown(f"""
 <style>
     {font_face_css}
-    .stApp {{ background-color: #F8F9FA; }}
-    .hero-banner {{ background: #1A1D24; padding: 40px 50px; border-radius: 12px; margin-bottom: 35px; border-left: 6px solid #FFCC00; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+    
+
+    /* 상단 배너(Hero Banner)는 테마와 무관하게 KB 블랙/옐로우 포인트 유지 */
+    .hero-banner {{ background: #1A1D24 !important; padding: 40px 50px; border-radius: 12px; margin-bottom: 35px; border-left: 6px solid #FFCC00; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
     .hero-banner h1 {{ color: #FFFFFF !important; font-size: 2.4rem; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px; }}
     .hero-banner h1 span {{ color: #FFCC00 !important; font-family: 'KBFGText', sans-serif !important; }}
-    .hero-banner p {{ color: #A0AEC0 !important; font-size: 1.05rem; margin: 0; line-height: 1.5; font-family: 'KBFGText', sans-serif !important; }}
+    .hero-banner p {{ color: #A0AEC0 !important; opacity: 1.0; font-size: 1.05rem; margin: 0; line-height: 1.5; font-family: 'KBFGText', sans-serif !important; }}
+    
+    /* 스코어 카드는 고정된 원색 배경이므로 글자색을 흰색으로 고정 유지 */
     .score-card {{ padding: 30px 20px; border-radius: 10px; color: #FFFFFF !important; text-align: center; margin: 20px 0; }}
     .score-card p {{ color: #FFFFFF !important; margin-bottom:5px; }}
-    .score-card.high {{ background: #E53E3E; }}
-    .score-card.medium {{ background: #D97706; }}
-    .score-card.low {{ background: #16A34A; }}
+    .score-card.high {{ background: #C53030; }}
+    .score-card.medium {{ background: #DD6B20; }}
+    .score-card.low {{ background: #2F855A; }}
     .score-card h2 {{ color: #FFFFFF !important; font-size: 2.2rem; font-weight: 800; margin: 5px 0 0 0; }}
-    div[data-testid="stVerticalBlock"] div.stContainer {{ background: #FFFFFF; border-radius: 10px; padding: 25px; border: 1px solid #E2E8F0; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }}
-    .step-header {{ font-size: 1.1rem; font-weight: 700; color: #2D3748; margin-bottom: 5px; }}
-    .step-header span.num {{ background: #F1F5F9; color: #475569; padding: 2px 8px; border-radius: 6px; font-size: 0.9rem; margin-right: 8px; font-weight: 600; }}
-    .step-desc {{ color: #718096; font-size: 0.9rem; margin-bottom: 15px; }}
-    div.stButton > button[kind="primary"] {{ background-color: #FFCC00; color: #1A1D24 !important; font-size: 1.1rem; font-weight: 700; border-radius: 8px; height: 55px; border: 1px solid #E5B800; }}
-    div.stButton > button[kind="primary"]:hover {{ background-color: #F5B900; }}
+    
+    /* 컨테이너 박스 테마 자동 적용 */
+    div[data-testid="stVerticalBlock"] div.stContainer {{ background: var(--secondary-background-color) !important; border-radius: 10px; padding: 25px; border: 1px solid rgba(128, 128, 128, 0.2) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }}
+    
+    .step-header {{ font-size: 1.1rem; font-weight: 700; color: var(--text-color); margin-bottom: 5px; }}
+    .step-header span.num {{ background: var(--background-color); color: var(--text-color); padding: 2px 8px; border-radius: 6px; font-size: 0.9rem; margin-right: 8px; font-weight: 600; border: 1px solid rgba(128, 128, 128, 0.2); }}
+    .step-desc {{ color: gray; font-size: 0.9rem; margin-bottom: 15px; }}
+    
+    div.stButton > button[kind="primary"] {{ background-color: #FFCC00; color: #000000 !important; font-size: 1.1rem; font-weight: 700; border-radius: 8px; height: 55px; border: 1px solid #E5B800; }}
+    div.stButton > button[kind="primary"]:hover {{ background-color: #F5B900; color: #000000 !important; }}
+    
+    /* 뱃지는 투명도(rgba)를 사용하여 배경색에 구애받지 않도록 설정 */
     .status-badge {{ padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; margin-right: 6px; display: inline-block; }}
-    .badge-high {{ background-color: #FFF5F5; color: #C53030; border: 1px solid #FEB2B2; }}
-    .badge-medium {{ background-color: #FFFFF0; color: #B7791F; border: 1px solid #F6E05E; }}
-    .badge-low {{ background-color: #F0FFF4; color: #276749; border: 1px solid #9AE6B4; }}
-    .badge-gray {{ background-color: #F7FAFC; color: #4A5568; border: 1px solid #E2E8F0; }}
-    .highlight-box {{ background: #F8F9FA; border-left: 3px solid #FFCC00; padding: 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.95rem; line-height: 1.6; color: #2D3748; }}
-    .executive-summary {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 24px; border-radius: 12px; font-size: 1rem; color: #334155; line-height: 1.6; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }}
+    .badge-high {{ background-color: rgba(229, 62, 62, 0.15); color: #E53E3E; border: 1px solid rgba(229, 62, 62, 0.3); }}
+    .badge-medium {{ background-color: rgba(221, 107, 32, 0.15); color: #DD6B20; border: 1px solid rgba(221, 107, 32, 0.3); }}
+    .badge-low {{ background-color: rgba(47, 133, 90, 0.15); color: #2F855A; border: 1px solid rgba(47, 133, 90, 0.3); }}
+    .badge-gray {{ background-color: var(--background-color); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); opacity: 0.8; }}
+    
+    .highlight-box {{ background: var(--background-color); border-left: 3px solid #FFCC00; padding: 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.95rem; line-height: 1.6; color: var(--text-color); border-top: 1px solid rgba(128, 128, 128, 0.2); border-right: 1px solid rgba(128, 128, 128, 0.2); border-bottom: 1px solid rgba(128, 128, 128, 0.2); }}
+    .executive-summary {{ background-color: var(--secondary-background-color); border: 1px solid rgba(128, 128, 128, 0.2); padding: 24px; border-radius: 12px; font-size: 1rem; color: var(--text-color); line-height: 1.6; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+    
+    /* 텍스트 색상 유틸리티 (다크/라이트 공용) */
+    .text-high {{ color: #E53E3E !important; }}
+    .text-medium {{ color: #DD6B20 !important; }}
+    .text-low {{ color: #2F855A !important; }}
+    .text-muted {{ color: gray !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -129,14 +145,12 @@ if "history" not in st.session_state:
 if "current_view" not in st.session_state:
     st.session_state.current_view = None
 
-# ====== 모델 로드 ======
 @st.cache_resource(show_spinner=False)
 def load_analyzers():
     return analyzer.ClauseAnalyzer(), analyzer.SalesRiskAnalyzer()
 
 clause_analyzer, sales_analyzer = load_analyzers()
 
-# ====== 법률 용어 설명 딕셔너리 ======
 EASY_EXPLANATIONS = {
     "TC001": "회사의 과실로 고객이 손해를 입었음에도 불구하고, 배상 책임을 축소하거나 면책하려는 조항입니다.",
     "TC002": "고객의 사전 동의 절차 없이, 회사가 일방적으로 서비스 규정이나 혜택을 변경할 수 있도록 하는 조항입니다.",
@@ -145,7 +159,6 @@ EASY_EXPLANATIONS = {
     "TC005": "가입 시점에는 존재하지 않았던 고객에게 불리한 조건을 사후에 일방적으로 추가할 수 있는 조항입니다."
 }
 
-# ====== 공통 렌더링 함수 ======
 def render_analysis_result(record, tab_prefix="main"):
     report = record["report"]
     toxic_results = record["toxic_results"]
@@ -184,33 +197,29 @@ def render_analysis_result(record, tab_prefix="main"):
         else:
             c3.metric("불완전판매 위험 점수", "N/A (분석제외)")
 
-    # --- 1. 요약 리포트 ---
-    st.markdown("<h3 style='margin-top:30px; font-weight:700; color:#1A1D24; font-size:1.3rem;'>AI 분석 결과 요약</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-top:30px; font-weight:700; color:var(--text-color); font-size:1.3rem;'>AI 분석 결과 요약</h3>", unsafe_allow_html=True)
     
     if score >= high_threshold:
-        summary_title = "<strong style='color:#E53E3E; font-size:1.15rem;'>조치 권고: 고위험 요소 감지</strong>"
-        summary_desc = "분석 데이터 내에 금융소비자보호법 위반 소지가 있거나 <b>고객에게 불리하게 해석될 수 있는 중대한 리스크 요소</b>가 포함되어 있습니다. 향후 법적 분쟁의 소지가 있으므로 검출된 내역을 중심으로 즉각적인 조치가 권장됩니다."
+        summary_title = "<strong class='text-high' style='font-size:1.15rem;'>조치 권고: 고위험 요소 감지</strong>"
+        summary_desc = "분석 데이터 내에 금융소비자보호법 위반 소지가 있거나 <b>고객에게 불리하게 해석될 수 있는 중대한 리스크 요소</b>가 포함되어 있습니다."
     elif score >= medium_threshold:
-        summary_title = "<strong style='color:#D97706; font-size:1.15rem;'>검토 권장: 주의 요소 감지</strong>"
-        summary_desc = "전반적인 내용은 양호하나, <b>오해를 유발하거나 불완전판매로 간주될 수 있는 주의 요소</b>가 일부 발견되었습니다. 문구의 명확성을 높이기 위한 내부 검토를 권장합니다."
+        summary_title = "<strong class='text-medium' style='font-size:1.15rem;'>검토 권장: 주의 요소 감지</strong>"
+        summary_desc = "전반적인 내용은 양호하나, <b>오해를 유발하거나 불완전판매로 간주될 수 있는 주의 요소</b>가 일부 발견되었습니다."
     else:
-        summary_title = "<strong style='color:#16A34A; font-size:1.15rem;'>적합 판정: 특이사항 없음</strong>"
+        summary_title = "<strong class='text-low' style='font-size:1.15rem;'>적합 판정: 특이사항 없음</strong>"
         summary_desc = "현재 분석된 데이터에서는 금융소비자보호 가이드라인에 위배되는 <b>특별한 리스크 요인이 발견되지 않았습니다.</b>"
 
     issue_bullets = ""
     if toxic_results or (mode in ["상담 녹취 대조", "통합 리포트"] and record["has_transcript"] and report.get("sales_analysis", {}).get("signals")):
-        issue_bullets += "<div style='margin-top:15px; padding-top:15px; border-top:1px dashed #CBD5E1;'>"
-        issue_bullets += "<strong style='color:#475569; font-size:1.05rem;'>발견된 주요 리스크 요인:</strong><ul style='margin-top:8px; margin-bottom:0; color:#334155; font-size:0.95rem; line-height:1.7;'>"
-        
+        issue_bullets += "<div style='margin-top:15px; padding-top:15px; border-top:1px dashed rgba(128,128,128,0.3);'>"
+        issue_bullets += "<strong class='text-muted' style='font-size:1.05rem;'>발견된 주요 리스크 요인:</strong><ul style='margin-top:8px; margin-bottom:0; color:var(--text-color); font-size:0.95rem; line-height:1.7;'>"
         if toxic_results:
             categories = list(set([item['category'] for item in toxic_results]))
             issue_bullets += f"<li><b>약관 문서:</b> {', '.join(categories)} 규정과 관련된 조항에서 주의가 필요합니다.</li>"
-        
         sr = report.get("sales_analysis", {})
         if sr.get("signals"):
             keywords = list(set([sig['keyword'] for sig in sr['signals']]))
             issue_bullets += f"<li><b>상담 녹취:</b> '{', '.join(keywords)}' 등 고객에게 단정적인 기대를 유발할 수 있는 단어가 사용되었습니다.</li>"
-            
         issue_bullets += "</ul></div>"
 
     st.markdown(f"""
@@ -221,42 +230,31 @@ def render_analysis_result(record, tab_prefix="main"):
     </div>
     """, unsafe_allow_html=True)
 
-    # --- 2. 독소조항 분석 내역 ---
     if mode in ["약관 리스크 스캔", "통합 리포트"]:
-        st.markdown("<h3 style='margin-top:35px; font-weight:700; color:#1A1D24; font-size:1.2rem;'>검출된 약관 리스크 상세 내역</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-top:35px; font-weight:700; color:var(--text-color); font-size:1.2rem;'>검출된 약관 리스크 상세 내역</h3>", unsafe_allow_html=True)
         with st.container():
             if not toxic_results:
                 st.info("검출된 독소조항이 없습니다. 규정 가이드라인을 준수하고 있습니다.")
             else:
                 easy_mode = st.toggle("법률 용어 쉬운 설명 모드", key=f"easy_toggle_{tab_prefix}_{record['id']}")
-                
                 for i, item in enumerate(toxic_results, 1):
                     with st.expander(f"[{item['category']}] 리스크 점수: {item['top_risk_score']}점", expanded=(i==1)):
                         if easy_mode:
                             easy_text = EASY_EXPLANATIONS.get(item['id'], "해당 조항은 해석에 따라 고객에게 불리한 영향을 미칠 수 있습니다.")
                             st.info(f"**해설:** {easy_text}")
-                        
-                        st.markdown(f"<div style='color:#4A5568; font-size:0.9rem; margin-bottom:10px;'><b>Rule ID:</b> <code style='background:#F1F5F9; padding:2px 6px; border-radius:4px;'>{item['id']}</code> &nbsp;|&nbsp; <b>권장 가이드:</b> {item['guide']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='text-muted' style='font-size:0.9rem; margin-bottom:10px;'><b>Rule ID:</b> <code style='background:var(--background-color); color:var(--text-color); padding:2px 6px; border-radius:4px; border: 1px solid rgba(128,128,128,0.2);'>{item['id']}</code> &nbsp;|&nbsp; <b>권장 가이드:</b> {item['guide']}</div>", unsafe_allow_html=True)
                         for match in item["matches"]:
-                            highlighted = utils.highlight_text(match["text"], match["keyword_hits"], color="#FEF08A")
+                            highlighted = utils.highlight_text(match["text"], match["keyword_hits"], color="rgba(217, 119, 6, 0.3)")
                             st.markdown(f"<div class='highlight-box'>{highlighted}</div>", unsafe_allow_html=True)
-                        st.markdown("<hr style='border:0; border-top:1px solid #E2E8F0; margin:15px 0;'>", unsafe_allow_html=True)
+                        st.markdown("<hr style='border:0; border-top:1px solid rgba(128,128,128,0.2); margin:15px 0;'>", unsafe_allow_html=True)
                         st.markdown(f"**AI 리스크 분류:** <span class='status-badge badge-gray'>{item['cls_result']['label']} (신뢰도: {item['cls_result']['confidence']})</span>", unsafe_allow_html=True)
-                        
-                        if item["attn"] and not easy_mode:
-                            attn_html = " <span style='color:#CBD5E0; margin:0 4px;'>/</span> ".join(
-                                [f"<span style='color:#2B6CB0; font-weight:600;'>{tok} <span style='color:#718096; font-weight:400; font-size:0.85em;'>({s:.2f})</span></span>" for tok, s in item["attn"][:6]]
-                            )
-                            st.markdown(f"<div style='margin-top:10px;'><b>판별 근거 (XAI 주요 인자):</b><br><div style='margin-top:5px; font-size:0.95rem;'>{attn_html}</div></div>", unsafe_allow_html=True)
 
-    # --- 3. 불완전판매 분석 내역 ---
     if mode in ["상담 녹취 대조", "통합 리포트"] and record["has_transcript"]:
-        st.markdown("<h3 style='margin-top:35px; font-weight:700; color:#1A1D24; font-size:1.2rem;'>상담 불완전판매 감지 내역</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-top:35px; font-weight:700; color:var(--text-color); font-size:1.2rem;'>상담 불완전판매 감지 내역</h3>", unsafe_allow_html=True)
         with st.container():
             sr = report.get("sales_analysis", {})
             risk_score = sr.get("risk_score", 0)
-            st.markdown(f"<p style='font-size:1.05rem; color:#4A5568;'>스크립트 위험 점수: <b style='color:#E53E3E;'>{risk_score}점</b></p>", unsafe_allow_html=True)
-
+            st.markdown(f"<p class='text-muted' style='font-size:1.05rem;'>스크립트 위험 점수: <b class='text-high'>{risk_score}점</b></p>", unsafe_allow_html=True)
             if sr.get("signals"):
                 signal_html = ""
                 for sig in sr["signals"]:
@@ -266,12 +264,25 @@ def render_analysis_result(record, tab_prefix="main"):
             else:
                 st.info("스크립트 분석 결과, 불완전판매 위험 신호가 감지되지 않았습니다.")
 
-# ====== 사이드바 ======
+    st.markdown("<hr style='border:0; border-top:1px solid rgba(128,128,128,0.2); margin:30px 0;'>", unsafe_allow_html=True)
+    
+    pdf_bytes = pdf_export.generate_pdf(record)
+    
+    st.download_button(
+        label="📄 PDF 감사 보고서(Audit Report) 다운로드",
+        data=pdf_bytes,
+        file_name=f"KB_X-Ray_Report_{record['id']}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        type="primary",
+        key=f"pdf_download_btn_{tab_prefix}_{record['id']}"  # 👈 이 줄을 꼭 추가해 주세요!
+    )
+
 with st.sidebar:
     st.markdown("""
     <div style='padding:10px 0 20px 0;'>
-        <h2 style='font-weight:800; color:#1A1D24; margin:0; letter-spacing:-0.5px;'>KB <span style='color:#D97706;'>X-Ray</span></h2>
-        <p style='color:#718096; font-size:0.8rem; font-weight:600; margin-top:2px; letter-spacing:0.5px;'>AI COMPLIANCE AGENT</p>
+        <h2 style='font-weight:800; color:var(--text-color); margin:0; letter-spacing:-0.5px;'>KB <span style='color:#D97706;'>X-Ray</span></h2>
+        <p class='text-muted' style='font-size:0.8rem; font-weight:600; margin-top:2px; letter-spacing:0.5px;'>AI COMPLIANCE AGENT</p>
     </div>
     """, unsafe_allow_html=True)
     st.divider()
@@ -286,7 +297,7 @@ with st.sidebar:
     
     st.divider()
     
-    st.markdown("<h4 style='color:#2D3748; font-weight:700; font-size:1rem;'>누적 스캔 통계</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:var(--text-color); font-weight:700; font-size:1rem;'>누적 스캔 통계</h4>", unsafe_allow_html=True)
     total_runs = len(st.session_state.history)
     st.metric("총 분석 건수", f"{total_runs}건")
     if total_runs > 0:
@@ -305,7 +316,6 @@ with st.sidebar:
             save_history([])
             st.rerun()
 
-# ====== 메인 히어로 배너 ======
 st.markdown(f"""
 <div class="hero-banner">
     <h1>KB <span>X-Ray</span></h1>
@@ -313,7 +323,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== 메인 탭 ======
 tab_main, tab_history = st.tabs(["새로운 리스크 스캔", "분석 기록 대시보드"])
 
 with tab_main:
@@ -427,10 +436,9 @@ with tab_main:
         st.markdown("<hr style='margin: 40px 0;'>", unsafe_allow_html=True)
         render_analysis_result(st.session_state.current_view, tab_prefix="main")
 
-# ====== 분석 기록 대시보드 탭 ======
 with tab_history:
-    st.markdown("<h3 style='font-weight:700; color:#1A1D24; font-size:1.3rem; margin-bottom:5px;'>리스크 모니터링 대시보드</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#718096; font-size:0.95rem; margin-bottom:20px;'>누적된 분석 결과의 트렌드를 파악하고 과거 리포트를 열람합니다.</p>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-weight:700; color:var(--text-color); font-size:1.3rem; margin-bottom:5px;'>리스크 모니터링 대시보드</h3>", unsafe_allow_html=True)
+    st.markdown("<p class='text-muted' style='font-size:0.95rem; margin-bottom:20px;'>누적된 분석 결과의 트렌드를 파악하고 과거 리포트를 열람합니다.</p>", unsafe_allow_html=True)
     
     if not st.session_state.history:
         st.info("분석된 기록이 없습니다. 새로운 분석을 실행해 주십시오.")
@@ -443,7 +451,7 @@ with tab_history:
         chart_data = df.set_index('date')['score']
         st.line_chart(chart_data, use_container_width=True, color="#D97706")
         
-        st.markdown("<hr style='border:0; border-top:1px solid #E2E8F0; margin:20px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:0; border-top:1px solid rgba(128,128,128,0.2); margin:20px 0;'>", unsafe_allow_html=True)
         st.markdown("<b>상세 분석 로그</b>", unsafe_allow_html=True)
 
         for idx, rec in enumerate(st.session_state.history):
@@ -451,12 +459,11 @@ with tab_history:
             expander_title = f"{status_label} {rec['date']} | {rec['mode']} - {rec['file_name']} (위험도: {rec['score']}점)"
             
             with st.expander(expander_title):
-                st.markdown(f"<div style='color:#718096; font-size:0.9rem; margin-bottom:10px;'><b>분석 ID:</b> `{rec['id']}`</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='text-muted' style='font-size:0.9rem; margin-bottom:10px;'><b>분석 ID:</b> `{rec['id']}`</div>", unsafe_allow_html=True)
                 render_analysis_result(rec, tab_prefix="history")
 
-# ====== 공통 푸터 ======
 st.markdown("""
-<div style='text-align:center; padding: 30px 0; color:#A0AEC0; font-size:0.85rem; margin-top:50px; border-top:1px solid #E2E8F0;'>
+<div class='text-muted' style='text-align:center; padding: 30px 0; font-size:0.85rem; margin-top:50px; border-top:1px solid rgba(128, 128, 128, 0.2);'>
     <b>© 2026 KB Future Finance AI Challenge. Prototype Demo.</b><br>
     본 시스템은 AI 컴플라이언스 진단 프로토타입으로, 실제 법적 구속력 및 효력을 갖지 않습니다.
 </div>
