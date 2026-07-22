@@ -1,0 +1,14 @@
+streamlit
+torch
+transformers
+sentence-transformers
+openai-whisper
+PyPDF2
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+lime
+shap
+konlpy
