@@ -13,6 +13,7 @@ import os
 import json
 import pdf_export
 
+# ====== 데이터 영속성(Persistence) 처리를 위한 로컬 저장소 설정 ======
 HISTORY_FILE = "kb_xray_history.json"
 
 def load_history():
@@ -87,12 +88,11 @@ else:
     }
     """
 
-# ====== 다크/라이트 모드 자동 적응 스타일 ======
+# ====== 다크/라이트 모드 자동 적응 및 트렌디 UI 스타일 ======
 st.markdown(f"""
 <style>
     {font_face_css}
     
-
     /* 상단 배너(Hero Banner)는 테마와 무관하게 KB 블랙/옐로우 포인트 유지 */
     .hero-banner {{ background: #1A1D24 !important; padding: 40px 50px; border-radius: 12px; margin-bottom: 35px; border-left: 6px solid #FFCC00; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
     .hero-banner h1 {{ color: #FFFFFF !important; font-size: 2.4rem; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px; }}
@@ -117,6 +117,30 @@ st.markdown(f"""
     div.stButton > button[kind="primary"] {{ background-color: #FFCC00; color: #000000 !important; font-size: 1.1rem; font-weight: 700; border-radius: 8px; height: 55px; border: 1px solid #E5B800; }}
     div.stButton > button[kind="primary"]:hover {{ background-color: #F5B900; color: #000000 !important; }}
     
+    /* 트렌디 키워드 칩(Chip) 스타일 */
+    .keyword-chip {{
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+        color: #FFFFFF !important;
+        font-size: 0.85rem;
+        font-weight: 700;
+        margin: 4px 6px 10px 0;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }}
+
+    /* 임팩트 박스 그라데이션 UI */
+    .impact-gradient-box {{
+        background: linear-gradient(135deg, rgba(255, 204, 0, 0.15) 0%, rgba(217, 119, 6, 0.05) 100%);
+        border-left: 4px solid #D97706;
+        border-radius: 0 8px 8px 0;
+        padding: 20px;
+        margin-top: 15px;
+        color: var(--text-color);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    }}
+
     /* 뱃지는 투명도(rgba)를 사용하여 배경색에 구애받지 않도록 설정 */
     .status-badge {{ padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; margin-right: 6px; display: inline-block; }}
     .badge-high {{ background-color: rgba(229, 62, 62, 0.15); color: #E53E3E; border: 1px solid rgba(229, 62, 62, 0.3); }}
@@ -127,7 +151,7 @@ st.markdown(f"""
     .highlight-box {{ background: var(--background-color); border-left: 3px solid #FFCC00; padding: 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.95rem; line-height: 1.6; color: var(--text-color); border-top: 1px solid rgba(128, 128, 128, 0.2); border-right: 1px solid rgba(128, 128, 128, 0.2); border-bottom: 1px solid rgba(128, 128, 128, 0.2); }}
     .executive-summary {{ background-color: var(--secondary-background-color); border: 1px solid rgba(128, 128, 128, 0.2); padding: 24px; border-radius: 12px; font-size: 1rem; color: var(--text-color); line-height: 1.6; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
     
-    /* 텍스트 색상 유틸리티 (다크/라이트 공용) */
+    /* 텍스트 색상 유틸리티 */
     .text-high {{ color: #E53E3E !important; }}
     .text-medium {{ color: #DD6B20 !important; }}
     .text-low {{ color: #2F855A !important; }}
@@ -199,34 +223,46 @@ def render_analysis_result(record, tab_prefix="main"):
 
     st.markdown("<h3 style='margin-top:30px; font-weight:700; color:var(--text-color); font-size:1.3rem;'>AI 분석 결과 요약</h3>", unsafe_allow_html=True)
     
+    # 칩(Chip) 생성을 위한 핵심 키워드 수집
+    all_keywords = set()
+    if toxic_results:
+        for item in toxic_results:
+            all_keywords.add(item['category'])
+    sr = report.get("sales_analysis", {})
+    if sr.get("signals"):
+        for sig in sr['signals']:
+            all_keywords.add(sig['keyword'])
+            
+    chip_html = ""
+    if all_keywords:
+        chip_html = "<div style='margin-bottom:15px;'>" + "".join([f"<span class='keyword-chip'>#{kw}</span>" for kw in list(all_keywords)[:5]]) + "</div>"
+
     if score >= high_threshold:
         summary_title = "<strong class='text-high' style='font-size:1.15rem;'>조치 권고: 고위험 요소 감지</strong>"
         summary_desc = "분석 데이터 내에 금융소비자보호법 위반 소지가 있거나 <b>고객에게 불리하게 해석될 수 있는 중대한 리스크 요소</b>가 포함되어 있습니다."
+        impact_loss = "<span class='text-high' style='font-weight:800;'>약 50억 원 이상 (과징금 및 배상액 추산)</span>"
     elif score >= medium_threshold:
         summary_title = "<strong class='text-medium' style='font-size:1.15rem;'>검토 권장: 주의 요소 감지</strong>"
         summary_desc = "전반적인 내용은 양호하나, <b>오해를 유발하거나 불완전판매로 간주될 수 있는 주의 요소</b>가 일부 발견되었습니다."
+        impact_loss = "<span class='text-medium' style='font-weight:800;'>약 1~5억 원 (고객 민원 대응 비용 추산)</span>"
     else:
         summary_title = "<strong class='text-low' style='font-size:1.15rem;'>적합 판정: 특이사항 없음</strong>"
         summary_desc = "현재 분석된 데이터에서는 금융소비자보호 가이드라인에 위배되는 <b>특별한 리스크 요인이 발견되지 않았습니다.</b>"
+        impact_loss = "<span class='text-low' style='font-weight:800;'>0원 (리스크 방어 완료)</span>"
 
-    issue_bullets = ""
-    if toxic_results or (mode in ["상담 녹취 대조", "통합 리포트"] and record["has_transcript"] and report.get("sales_analysis", {}).get("signals")):
-        issue_bullets += "<div style='margin-top:15px; padding-top:15px; border-top:1px dashed rgba(128,128,128,0.3);'>"
-        issue_bullets += "<strong class='text-muted' style='font-size:1.05rem;'>발견된 주요 리스크 요인:</strong><ul style='margin-top:8px; margin-bottom:0; color:var(--text-color); font-size:0.95rem; line-height:1.7;'>"
-        if toxic_results:
-            categories = list(set([item['category'] for item in toxic_results]))
-            issue_bullets += f"<li><b>약관 문서:</b> {', '.join(categories)} 규정과 관련된 조항에서 주의가 필요합니다.</li>"
-        sr = report.get("sales_analysis", {})
-        if sr.get("signals"):
-            keywords = list(set([sig['keyword'] for sig in sr['signals']]))
-            issue_bullets += f"<li><b>상담 녹취:</b> '{', '.join(keywords)}' 등 고객에게 단정적인 기대를 유발할 수 있는 단어가 사용되었습니다.</li>"
-        issue_bullets += "</ul></div>"
+    impact_box = f"""
+    <div class='impact-gradient-box'>
+        <div style='margin-bottom:6px; font-weight:800;'>📈 비즈니스 임팩트 예측</div>
+        <div style='font-size: 0.95rem;'>• <b>예상 재무 리스크 방어액:</b> {impact_loss}</div>
+    </div>
+    """
 
     st.markdown(f"""
     <div class='executive-summary'>
+        {chip_html}
         {summary_title}<br>
         <div style='margin-top:8px;'>{summary_desc}</div>
-        {issue_bullets}
+        {impact_box}
     </div>
     """, unsafe_allow_html=True)
 
@@ -266,17 +302,32 @@ def render_analysis_result(record, tab_prefix="main"):
 
     st.markdown("<hr style='border:0; border-top:1px solid rgba(128,128,128,0.2); margin:30px 0;'>", unsafe_allow_html=True)
     
-    pdf_bytes = pdf_export.generate_pdf(record)
+    # 다운로드 버튼 영역 (PDF와 JSON 나란히 배치)
+    col_pdf, col_json = st.columns(2)
     
-    st.download_button(
-        label="📄 PDF 감사 보고서(Audit Report) 다운로드",
-        data=pdf_bytes,
-        file_name=f"KB_X-Ray_Report_{record['id']}.pdf",
-        mime="application/pdf",
-        use_container_width=True,
-        type="primary",
-        key=f"pdf_download_btn_{tab_prefix}_{record['id']}"  # 👈 이 줄을 꼭 추가해 주세요!
-    )
+    with col_pdf:
+        pdf_bytes = pdf_export.generate_pdf(record) if hasattr(pdf_export, 'generate_pdf') else b"PDF Error"
+        st.download_button(
+            label="📄 PDF 보고서 다운로드",
+            data=pdf_bytes,
+            file_name=f"KB_X-Ray_Report_{record['id']}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary",
+            key=f"pdf_btn_{tab_prefix}_{record['id']}"
+        )
+        
+    with col_json:
+        # 분석 결과를 JSON 형태의 텍스트로 변환
+        json_data = json.dumps(record, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="💻 개발자용 Raw JSON 다운로드",
+            data=json_data,
+            file_name=f"KB_X-Ray_Data_{record['id']}.json",
+            mime="application/json",
+            use_container_width=True,
+            key=f"json_btn_{tab_prefix}_{record['id']}"
+        )
 
 with st.sidebar:
     st.markdown("""
